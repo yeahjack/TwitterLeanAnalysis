@@ -30,4 +30,7 @@ app/timeline_header.html
 notebooks/.ipynb_checkpoints/**
 data/
 **.pyc
-notebooks/02.Transformers/runs/
+notebooks/02.Transformers/runs/**
+!notebooks/02.Transformers/runs/
+.vscode
+
