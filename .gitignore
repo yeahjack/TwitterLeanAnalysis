@@ -28,7 +28,8 @@ venv
 app/content_table.html
 app/timeline_header.html
 notebooks/.ipynb_checkpoints/**
-data/
+data/**
+!data/
 **.pyc
 notebooks/02.Transformers/runs/**
 !notebooks/02.Transformers/runs/
