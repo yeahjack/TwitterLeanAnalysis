@@ -27,3 +27,7 @@ experiments/fake_news/very_large_data
 venv
 app/content_table.html
 app/timeline_header.html
+notebooks/.ipynb_checkpoints/**
+data/
+**.pyc
+notebooks/02.Transformers/runs/
