@@ -86,7 +86,7 @@ def train(model, train_loader, optimizer, scheduler, device, epoch, writer):
     regression_loss_fn = nn.MSELoss()
 
     # Use tqdm to show a progress bar for the training loop
-    progress_bar = tqdm(train_loader, leave=False)
+    progress_bar = tqdm(train_loader, leave=False, ncols=150)
 
     for batch_idx, batch in enumerate(progress_bar):
         optimizer.zero_grad()
@@ -127,7 +127,7 @@ def train(model, train_loader, optimizer, scheduler, device, epoch, writer):
 
 # Hyperparameters
 epochs = 5
-batch_size = 56
+batch_size = 60
 learning_rate = 2e-5
 cache_dir = (
     "/home/xuyijie/news-title-bias/notebooks/06.Multi-task_Learning/cache_pretrained"
@@ -181,7 +181,7 @@ for epoch in range(epochs):
 
     # Save the model after each epoch
     model_to_save = model.module if hasattr(model, "module") else model
-    torch.save(model_to_save.state_dict(), f"output/model_epoch_{epoch+1}.pth")
+    torch.save(model_to_save.state_dict(), f"/home/xuyijie/news-title-bias/notebooks/06.Multi-task_Learning/runs/output/model_epoch_{epoch+1}.pth")
 
 # Close the TensorBoard writer
 writer.close()
@@ -237,6 +237,6 @@ for epoch in range(epochs):
 
     # Save the model after each epoch
     model_to_save = model.module if hasattr(model, "module") else model
-    torch.save(model_to_save.state_dict(), f"output/model_epoch_{epoch+1}.pth")
+    torch.save(model_to_save.state_dict(), f"/home/xuyijie/news-title-bias/notebooks/06.Multi-task_Learning/runs/output/model_epoch_{epoch+1}.pth")
 
 # This will give you an evaluation of the model's performance on both classification and regression tasks for the validation set.
