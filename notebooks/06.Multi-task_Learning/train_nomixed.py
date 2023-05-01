@@ -14,11 +14,11 @@ from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
 EPOCHS = 10
-BATCH_SIZE = 60
+BATCH_SIZE = 30
 LEARNING_RATE = 2e-5
 HOME_DIR = "/home/xuyijie/news-title-bias/notebooks/06.Multi-task_Learning"
 CACHE_DIR = os.path.join(HOME_DIR, "cache_pretrained")
-DATA_PATH = "/home/xuyijie/news-title-bias/data/dataset/dataset_combined_multitask.csv"
+DATA_PATH = "/home/xuyijie/news-title-bias/data/dataset/dataset_combined_multitask_debug.csv"
 MODEL_DIR = os.path.join(HOME_DIR, "runs/output")
 WARMUP_STEPS = 100
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -86,6 +86,9 @@ class MultiTaskBERTBasedModel(nn.Module):
 
 
 def get_latest_checkpoint(model_dir):
+    # Determine if the model_dir exists
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
     model_files = [f for f in os.listdir(model_dir) if f.startswith("model_")]
     model_files.sort(key=lambda x: int(x.split("_")[-1].split(".")[0]))
     return model_files[-1] if model_files else None
@@ -125,7 +128,8 @@ def train(model, train_loader, optimizer, scheduler, device, epoch, writer):
         )
 
         progress_bar.set_postfix({"loss": f"{loss.item():.4f}"})
-
+        
+        torch.cuda.empty_cache()
     return total_loss / len(train_loader)
 
 
@@ -212,6 +216,7 @@ def main():
         )
 
         checkpoint_path = os.path.join(MODEL_DIR, f"model_{epoch + 1}")
+        model = model.module if hasattr(model, "module") else model
         model.save_pretrained(checkpoint_path)
         tqdm.write(f"Model checkpoint saved for Epoch {epoch + 1}")
 

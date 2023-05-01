@@ -15,17 +15,6 @@ from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
 
 
-EPOCHS = 15
-BATCH_SIZE = 75
-LEARNING_RATE = 2e-5
-HOME_DIR = "/home/xuyijie/news-title-bias/notebooks/06.Multi-task_Learning"
-CACHE_DIR = os.path.join(HOME_DIR, "cache_pretrained")
-DATA_PATH = "/home/xuyijie/news-title-bias/data/dataset/dataset_combined_multitask.csv"
-MODEL_DIR = os.path.join(HOME_DIR, "runs/output/mixed-precision")
-WARMUP_STEPS = 100
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
 class NewsDataset(Dataset):
     def __init__(self, data, tokenizer, max_length=512):
         self.data = data
@@ -61,18 +50,15 @@ class NewsDataset(Dataset):
 
 
 class MultiTaskBERTBasedModel(nn.Module):
-    def __init__(self, model_checkpoint, cache_dir=None, state_dict=None):
+    def __init__(self, MODEL_CHECKPOINT, cache_dir=None):
         super(MultiTaskBERTBasedModel, self).__init__()
         self.bert_based_model = AutoModel.from_pretrained(
-            model_checkpoint, cache_dir=cache_dir
+            MODEL_CHECKPOINT, cache_dir=cache_dir
         )
         self.classification_head = nn.Linear(
             self.bert_based_model.config.hidden_size, 2
         )
         self.regression_head = nn.Linear(self.bert_based_model.config.hidden_size, 1)
-
-        if state_dict is not None:
-            self.load_state_dict(state_dict)
 
     def save_pretrained(self, save_directory):
         self.bert_based_model.save_pretrained(save_directory)
@@ -89,7 +75,9 @@ class MultiTaskBERTBasedModel(nn.Module):
 
 
 def get_latest_checkpoint(model_dir):
-    model_files = [f for f in os.listdir(model_dir) if f.startswith("model_")]
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
+    model_files = [f for f in os.listdir(model_dir)]
     model_files.sort(key=lambda x: int(x.split("_")[-1].split(".")[0]))
     return model_files[-1] if model_files else None
 
@@ -113,7 +101,9 @@ def train(model, train_loader, optimizer, scheduler, device, epoch, writer, scal
             kind_preds, score_preds = model(input_ids, attention_mask)
 
             classification_loss = classification_loss_fn(kind_preds, kind)
-            regression_loss = regression_loss_fn(score_preds[kind == 1], score[kind == 1])
+            regression_loss = regression_loss_fn(
+                score_preds[kind == 1], score[kind == 1]
+            )
 
             loss = classification_loss + regression_loss
             total_loss += loss.item()
@@ -126,7 +116,6 @@ def train(model, train_loader, optimizer, scheduler, device, epoch, writer, scal
         scaler.update()
 
         scheduler.step()
-
         writer.add_scalar(
             os.path.join(HOME_DIR, "/Loss/train"),
             loss.item(),
@@ -171,33 +160,41 @@ def evaluate(model, val_loader, device):
 def main():
     data = pd.read_csv(DATA_PATH, names=["text", "kind", "score"], header=0)
     data["score"].fillna(0, inplace=True)
-    latest_checkpoint = get_latest_checkpoint(MODEL_DIR)
-    model_checkpoint = "xlm-roberta-base"
-    tokenizer = AutoTokenizer.from_pretrained(model_checkpoint, cache_dir=CACHE_DIR)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_CHECKPOINT, cache_dir=CACHE_DIR)
 
     train_data, val_data = train_test_split(data, test_size=0.1, random_state=42)
-    train_dataset = NewsDataset(train_data, tokenizer)
-    val_dataset = NewsDataset(val_data, tokenizer)
+    train_dataset = NewsDataset(train_data, tokenizer, max_length=MAX_LENGTH)
+    val_dataset = NewsDataset(val_data, tokenizer, max_length=MAX_LENGTH)
 
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=False)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+    train_loader = DataLoader(
+        train_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4
+    )
+    val_loader = DataLoader(
+        val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4
+    )
 
-    writer = SummaryWriter(os.path.join(HOME_DIR, "runs/multitask_xlm_roberta"))
+    writer = SummaryWriter(os.path.join(HOME_DIR, "runs/%s" % (MODEL_CHECKPOINT)))
 
     total_steps = len(train_loader) * EPOCHS
 
+    latest_checkpoint = get_latest_checkpoint(MODEL_DIR)
     if latest_checkpoint:
         checkpoint_path = os.path.join(MODEL_DIR, latest_checkpoint)
-        model_checkpoint = checkpoint_path
         starting_epoch = int(latest_checkpoint.split("_")[-1].split(".")[0])
+        tqdm.write(
+            f"Starting from checkpoint {checkpoint_path} (epoch {starting_epoch})"
+        )
+        model = MultiTaskBERTBasedModel(
+            MODEL_CHECKPOINT=checkpoint_path, cache_dir=CACHE_DIR
+        )
     else:
         starting_epoch = 0
-    tqdm.write('Will use the model checkpoint at "{}"'.format(model_checkpoint))
-    model = MultiTaskBERTBasedModel(
-        model_checkpoint=model_checkpoint, cache_dir=CACHE_DIR
-    )
+        tqdm.write(f"Creating model from scratch {MODEL_CHECKPOINT}")
+        model = MultiTaskBERTBasedModel(
+            MODEL_CHECKPOINT=MODEL_CHECKPOINT, cache_dir=CACHE_DIR
+        )
     if torch.cuda.device_count() > 1:
-        model = DataParallel(model)
+        model = DataParallel(model).cuda()
     model.to(DEVICE)
     optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
     scheduler = get_linear_schedule_with_warmup(
@@ -220,12 +217,27 @@ def main():
             f"Train Loss: {train_loss:.4f} | Val Classification Loss: {val_classification_loss:.4f} | Val Regression Loss: {val_regression_loss:.4f}"
         )
 
-        checkpoint_path = os.path.join(MODEL_DIR, f"model_{epoch + 1}")
-        model = model.module if hasattr(model, "module") else model
-        model.save_pretrained(checkpoint_path)
+        checkpoint_path = os.path.join(
+            MODEL_DIR, f"{MODEL_CHECKPOINT}_epoch_{epoch + 1}"
+        )
+        model_save = model.module if hasattr(model, "module") else model
+        model_save.save_pretrained(checkpoint_path)
 
     writer.close()
 
 
 if __name__ == "__main__":
+    EPOCHS = 5
+    BATCH_SIZE = 38
+    LEARNING_RATE = 2e-5
+    MAX_LENGTH = 1024
+    MODEL_CHECKPOINT = "allenai/longformer-base-4096"
+    HOME_DIR = "/home/xuyijie/news-title-bias/notebooks/06.Multi-task_Learning"
+    CACHE_DIR = os.path.join(HOME_DIR, "cache_pretrained")
+    DATA_PATH = "/home/xuyijie/news-title-bias/data/dataset/dataset_combined_multitask.csv"
+    MODEL_DIR = os.path.join(
+        HOME_DIR, "runs/output/model/mixed-precision/%s/epoch_%s"%(MODEL_CHECKPOINT,BATCH_SIZE)
+    )
+    WARMUP_STEPS = 100
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     main()
