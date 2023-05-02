@@ -50,7 +50,7 @@ class NewsDataset(Dataset):
 
 
 class MultiTaskBERTBasedModel(nn.Module):
-    def __init__(self, MODEL_CHECKPOINT, cache_dir=None):
+    def __init__(self, MODEL_CHECKPOINT, cache_dir=None, gradient_checkpointing=False):
         super(MultiTaskBERTBasedModel, self).__init__()
         self.bert_based_model = AutoModel.from_pretrained(
             MODEL_CHECKPOINT, cache_dir=cache_dir
@@ -59,6 +59,15 @@ class MultiTaskBERTBasedModel(nn.Module):
             self.bert_based_model.config.hidden_size, 2
         )
         self.regression_head = nn.Linear(self.bert_based_model.config.hidden_size, 1)
+        
+        if gradient_checkpointing:
+            self.bert_based_model.gradient_checkpointing_enable()
+        tqdm.write(f"Gradient Checkpointing: {self.bert_based_model.is_gradient_checkpointing}")
+        for name, param in self.bert_based_model.named_parameters():
+            tqdm.write('name: {}, shape: {}'.format(name, param.shape))
+            # Train pooler layer
+            if 'embeddings' in name or 'layer.0' in name or 'layer.1' in name or 'layer.2' in name:
+                param.requires_grad = False
 
     def save_pretrained(self, save_directory):
         self.bert_based_model.save_pretrained(save_directory)
@@ -227,11 +236,11 @@ def main():
 
 
 if __name__ == "__main__":
-    EPOCHS = 5
-    BATCH_SIZE = 38
+    EPOCHS = 20
+    BATCH_SIZE = 34
     LEARNING_RATE = 2e-5
     MAX_LENGTH = 1024
-    MODEL_CHECKPOINT = "allenai/longformer-base-4096"
+    MODEL_CHECKPOINT = "google/bigbird-roberta-base"
     HOME_DIR = "/home/xuyijie/news-title-bias/notebooks/06.Multi-task_Learning"
     CACHE_DIR = os.path.join(HOME_DIR, "cache_pretrained")
     DATA_PATH = "/home/xuyijie/news-title-bias/data/dataset/dataset_combined_multitask.csv"
