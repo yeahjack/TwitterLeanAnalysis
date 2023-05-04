@@ -70,7 +70,7 @@ class MultiTaskBERTBasedModel(nn.Module):
                 "embeddings" in name
                 or "layer.0" in name
                 or "layer.1" in name
-                or "layer.2"
+                or "layer.2" in name
             ):
                 param.requires_grad = False
 
