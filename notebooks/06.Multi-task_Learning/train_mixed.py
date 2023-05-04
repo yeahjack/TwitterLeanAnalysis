@@ -66,11 +66,14 @@ class MultiTaskBERTBasedModel(nn.Module):
         )
         for name, param in self.bert_based_model.named_parameters():
             # Freeze the word embeding and top three layers
-            if (
-                "embeddings" in name
-                or "layer.0" in name
-                or "layer.1" in name
-                or "layer.2" in name
+            if all(
+                network_name in name
+                for network_name in [
+                    "embeddings",
+                    "layer.0",
+                    "layer.1",
+                    "layer.2",
+                ]
             ):
                 param.requires_grad = False
 
@@ -264,7 +267,7 @@ def main():
 
 if __name__ == "__main__":
     EPOCHS = 20
-    BATCH_SIZE = 208
+    BATCH_SIZE = 24
     LEARNING_RATE = 2e-5
     MAX_LENGTH = 2048
     MODEL_CHECKPOINT = "allenai/longformer-base-4096"
