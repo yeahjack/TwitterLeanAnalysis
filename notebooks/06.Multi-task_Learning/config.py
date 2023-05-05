@@ -1,4 +1,6 @@
 # config.py
+import os
+import torch
 EPOCHS = 20
 BATCH_SIZE = 36
 LEARNING_RATE = 2e-5
