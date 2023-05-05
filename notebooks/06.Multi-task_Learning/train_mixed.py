@@ -10,7 +10,7 @@ from tqdm import tqdm
 from torch.nn.parallel import DataParallel
 from transformers import get_linear_schedule_with_warmup
 import os
-from datetime import datetime
+from config import *
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
 
@@ -59,9 +59,26 @@ class MultiTaskBERTBasedModel(nn.Module):
             self.bert_based_model.config.hidden_size, 2
         )
         self.regression_head = nn.Linear(self.bert_based_model.config.hidden_size, 1)
-
-    def save_pretrained(self, save_directory):
-        self.bert_based_model.save_pretrained(save_directory)
+        '''
+        # Freeze the BERT backbone
+        for name, param in self.bert_based_model.named_parameters():
+            if all(
+                network_name in name
+                for network_name in [
+                    "embeddings",
+                    "layer.0",
+                    "layer.1",
+                    "layer.2",
+                    "layer.3",
+                    "layer.4",
+                    "layer.5",
+                    "layer.6",
+                    "layer.7",
+                    "layer.8",
+                ]
+            ):
+                param.requires_grad = False
+        '''
 
     @autocast()
     def forward(self, input_ids, attention_mask):
@@ -73,13 +90,35 @@ class MultiTaskBERTBasedModel(nn.Module):
         regression_output = self.regression_head(pooled_output)
         return classification_output, regression_output.squeeze(-1)
 
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self.bert_based_model, name)
+
+
+def save_checkpoints(model, optimizer, scheduler, model_dir, epoch):
+    checkpoint_path = os.path.join(model_dir, f"checkpoint_epoch_{epoch}")
+    os.makedirs(checkpoint_path, exist_ok=True)
+
+    model_save = model.module if hasattr(model, "module") else model
+    model_save.save_pretrained(checkpoint_path)
+
+    optimizer_path = os.path.join(checkpoint_path, "optimizer.pt")
+    torch.save(optimizer.state_dict(), optimizer_path)
+
+    scheduler_path = os.path.join(checkpoint_path, "scheduler.pt")
+    torch.save(scheduler.state_dict(), scheduler_path)
+
 
 def get_latest_checkpoint(model_dir):
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
-    model_files = [f for f in os.listdir(model_dir)]
-    model_files.sort(key=lambda x: int(x.split("_")[-1].split(".")[0]))
-    return model_files[-1] if model_files else None
+    checkpoint_dirs = [
+        d for d in os.listdir(model_dir) if os.path.isdir(os.path.join(model_dir, d))
+    ]
+    checkpoint_dirs.sort(key=lambda x: int(x.split("_")[-1]))
+    return checkpoint_dirs[-1] if checkpoint_dirs else None
 
 
 def train(model, train_loader, optimizer, scheduler, device, epoch, writer, scaler):
@@ -180,13 +219,15 @@ def main():
     latest_checkpoint = get_latest_checkpoint(MODEL_DIR)
     if latest_checkpoint:
         checkpoint_path = os.path.join(MODEL_DIR, latest_checkpoint)
-        starting_epoch = int(latest_checkpoint.split("_")[-1].split(".")[0])
+        starting_epoch = int(latest_checkpoint.split("_")[-1])
         tqdm.write(
             f"Starting from checkpoint {checkpoint_path} (epoch {starting_epoch})"
         )
         model = MultiTaskBERTBasedModel(
             MODEL_CHECKPOINT=checkpoint_path, cache_dir=CACHE_DIR
         )
+        optimizer_path = os.path.join(checkpoint_path, "optimizer.pt")
+        scheduler_path = os.path.join(checkpoint_path, "scheduler.pt")
     else:
         starting_epoch = 0
         tqdm.write(f"Creating model from scratch {MODEL_CHECKPOINT}")
@@ -197,9 +238,14 @@ def main():
         model = DataParallel(model).cuda()
     model.to(DEVICE)
     optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
+    if latest_checkpoint and os.path.exists(optimizer_path):
+        optimizer.load_state_dict(torch.load(optimizer_path))
+
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=WARMUP_STEPS, num_training_steps=total_steps
     )
+    if latest_checkpoint and os.path.exists(scheduler_path):
+        scheduler.load_state_dict(torch.load(scheduler_path))
 
     # Training
     scaler = GradScaler()
@@ -220,24 +266,10 @@ def main():
         checkpoint_path = os.path.join(
             MODEL_DIR, f"{MODEL_CHECKPOINT}_epoch_{epoch + 1}"
         )
-        model_save = model.module if hasattr(model, "module") else model
-        model_save.save_pretrained(checkpoint_path)
+        save_checkpoints(model, optimizer, scheduler, MODEL_DIR, epoch + 1)
 
     writer.close()
 
 
 if __name__ == "__main__":
-    EPOCHS = 5
-    BATCH_SIZE = 38
-    LEARNING_RATE = 2e-5
-    MAX_LENGTH = 1024
-    MODEL_CHECKPOINT = "allenai/longformer-base-4096"
-    HOME_DIR = "/home/xuyijie/news-title-bias/notebooks/06.Multi-task_Learning"
-    CACHE_DIR = os.path.join(HOME_DIR, "cache_pretrained")
-    DATA_PATH = "/home/xuyijie/news-title-bias/data/dataset/dataset_combined_multitask.csv"
-    MODEL_DIR = os.path.join(
-        HOME_DIR, "runs/output/model/mixed-precision/%s/epoch_%s"%(MODEL_CHECKPOINT,BATCH_SIZE)
-    )
-    WARMUP_STEPS = 100
-    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     main()
