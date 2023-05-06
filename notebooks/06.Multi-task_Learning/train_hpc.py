@@ -10,7 +10,7 @@ from tqdm import tqdm
 from torch.nn.parallel import DataParallel
 from transformers import get_linear_schedule_with_warmup
 import os
-from config import *
+from config_hpc import *
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
 
