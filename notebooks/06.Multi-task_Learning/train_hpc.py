@@ -10,7 +10,7 @@ from tqdm import tqdm
 from torch.nn.parallel import DataParallel
 from transformers import get_linear_schedule_with_warmup
 import os
-from config_hpc import *
+import argparse
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
 
@@ -272,4 +272,22 @@ def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train a Multi-task BERT-based model")
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="hpc",
+        choices=["hpc", "lab", "rbmhpc", "metaserver"],
+        help="Select device configurations. Available options: hpc, lab, rbmhpc, metaserver",
+    )
+    args = parser.parse_args()
+
+    if args.device == "hpc":
+        from config_hpc import *
+    elif args.device == "lab":
+        from config_lab import *
+    elif args.device == "rbmhpc":
+        from config_rbmhpc import *
+    elif args.device == "metaserver":
+        from config_metaserver import *
     main()

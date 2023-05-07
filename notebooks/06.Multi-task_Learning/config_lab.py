@@ -1,4 +1,4 @@
-# config.py
+# config_lab.py
 import os
 import torch
 EPOCHS = 20
