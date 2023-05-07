@@ -276,13 +276,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--device",
         type=str,
-        default="hpc",
+        default=None,
         choices=["hpc", "lab", "rbmhpc", "metaserver"],
-        help="Select device configurations. Available options: hpc, lab, rbmhpc, metaserver",
+        help="Select device configurations.",
     )
     args = parser.parse_args()
 
-    if args.device == "hpc":
+    if args.device is None:
+        raise ValueError("Select device configurations. Available options: hpc, lab, rbmhpc, metaserver")
+    elif args.device == "hpc":
         from config_hpc import *
     elif args.device == "lab":
         from config_lab import *
@@ -290,4 +292,6 @@ if __name__ == "__main__":
         from config_rbmhpc import *
     elif args.device == "metaserver":
         from config_metaserver import *
+    else:
+        raise ValueError("Invalid device configuration")
     main()
