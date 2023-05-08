@@ -58,7 +58,8 @@ class MultiTaskBERTBasedModel(nn.Module):
         self.classification_head = nn.Linear(
             self.bert_based_model.config.hidden_size, 2
         )
-        self.regression_head = nn.Linear(self.bert_based_model.config.hidden_size, 1)
+        self.regression_head = nn.Linear(
+            self.bert_based_model.config.hidden_size, 1)
         """
         # Freeze the BERT backbone
         for name, param in self.bert_based_model.named_parameters():
@@ -82,7 +83,8 @@ class MultiTaskBERTBasedModel(nn.Module):
 
     @autocast()
     def forward(self, input_ids, attention_mask):
-        outputs = self.bert_based_model(input_ids, attention_mask=attention_mask)
+        outputs = self.bert_based_model(
+            input_ids, attention_mask=attention_mask)
         last_hidden_state = outputs[0]
         pooled_output = last_hidden_state[:, 0]
 
@@ -199,9 +201,11 @@ def evaluate(model, val_loader, device):
 def main():
     data = pd.read_csv(DATA_PATH, names=["text", "kind", "score"], header=0)
     data["score"].fillna(0, inplace=True)
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_CHECKPOINT, cache_dir=CACHE_DIR)
+    tokenizer = AutoTokenizer.from_pretrained(
+        MODEL_CHECKPOINT, cache_dir=CACHE_DIR)
 
-    train_data, val_data = train_test_split(data, test_size=0.1, random_state=42)
+    train_data, val_data = train_test_split(
+        data, test_size=0.1, random_state=42)
     train_dataset = NewsDataset(train_data, tokenizer, max_length=MAX_LENGTH)
     val_dataset = NewsDataset(val_data, tokenizer, max_length=MAX_LENGTH)
 
@@ -212,7 +216,8 @@ def main():
         val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4
     )
 
-    writer = SummaryWriter(os.path.join(HOME_DIR, "runs/%s" % (MODEL_CHECKPOINT)))
+    writer = SummaryWriter(os.path.join(
+        HOME_DIR, "runs/%s" % (MODEL_CHECKPOINT)))
 
     total_steps = len(train_loader) * EPOCHS
 
@@ -272,7 +277,8 @@ def main():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train a Multi-task BERT-based model")
+    parser = argparse.ArgumentParser(
+        description="Train a Multi-task BERT-based model")
     parser.add_argument(
         "--device",
         type=str,
