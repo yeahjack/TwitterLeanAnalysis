@@ -9,6 +9,7 @@ MODEL_CHECKPOINT = "allenai/longformer-base-4096"
 HOME_DIR = "/home/xuyijie/news-title-bias/notebooks/06.Multi-task_Learning"
 CACHE_DIR = os.path.join(HOME_DIR, "cache_pretrained")
 DATA_PATH = "/home/xuyijie/news-title-bias/data/dataset/dataset_combined_multitask.csv"
+DATA_PREPROCESSED_DIR = os.path.join(HOME_DIR, "cache_tokenizer")
 MODEL_DIR = os.path.join(
     HOME_DIR, "runs/output/model/mixed-precision/%s/epoch_%s"%(MODEL_CHECKPOINT.replace('/','-'),BATCH_SIZE)
 )
