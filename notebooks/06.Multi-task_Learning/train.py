@@ -59,7 +59,7 @@ class MultiTaskBERTBasedModel(nn.Module):
             self.bert_based_model.config.hidden_size, 2
         )
         self.regression_head = nn.Linear(self.bert_based_model.config.hidden_size, 1)
-        '''
+        """
         # Freeze the BERT backbone
         for name, param in self.bert_based_model.named_parameters():
             if all(
@@ -78,7 +78,7 @@ class MultiTaskBERTBasedModel(nn.Module):
                 ]
             ):
                 param.requires_grad = False
-        '''
+        """
 
     @autocast()
     def forward(self, input_ids, attention_mask):
@@ -283,7 +283,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.device is None:
-        raise ValueError("Select device configurations. Available options: hpc, lab, rbmhpc, metaserver")
+        raise ValueError(
+            "Select device configurations. Available options: hpc, lab, rbmhpc, metaserver"
+        )
     elif args.device == "hpc":
         from config_hpc import *
     elif args.device == "lab":
