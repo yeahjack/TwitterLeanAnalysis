@@ -1,12 +1,10 @@
-# This script reads text from the csv,
-# and preprocesses it using the tokenizer example by example.
+# Before running this script,
+# run preprocess_dataset.py to generate the preprocessed dataset
 
 import torch
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
-from transformers import AutoTokenizer, AutoModel
-import pandas as pd
-import numpy as np
+from transformers import AutoModel
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
@@ -19,37 +17,14 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 class NewsDataset(Dataset):
-    def __init__(self, data, tokenizer, max_length=512):
+    def __init__(self, data):
         self.data = data
-        self.tokenizer = tokenizer
-        self.max_length = max_length
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        text = self.data.iloc[idx, 0]
-        kind = self.data.iloc[idx, 1]
-        score = self.data.iloc[idx, 2]
-
-        encoding = self.tokenizer(
-            text,
-            return_tensors="pt",
-            max_length=self.max_length,
-            padding="max_length",
-            truncation=True,
-        )
-        input_ids = encoding["input_ids"][0]
-        attention_mask = encoding["attention_mask"][0]
-
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "kind": torch.tensor(kind, dtype=torch.long),
-            "score": torch.tensor(
-                score if not np.isnan(score) else 0.0, dtype=torch.float
-            ),
-        }
+        return self.data[idx]
 
 
 class MultiTaskBERTBasedModel(nn.Module):
@@ -202,23 +177,20 @@ def evaluate(model, val_loader, device):
 
 
 def main():
-    data = pd.read_csv(DATA_PATH, names=["text", "kind", "score"], header=0)
-    data["score"].fillna(0, inplace=True)
-    tokenizer = AutoTokenizer.from_pretrained(
-        MODEL_CHECKPOINT, cache_dir=CACHE_DIR)
-
+    data = torch.load(os.path.join(
+        DATA_PREPROCESSED_DIR, f'preprocessed_dataset_{MODEL_CHECKPOINT.replace("/", "-")}', 'data_preprocessed.pt'))
     train_data, val_data = train_test_split(
-        data, test_size=0.1, random_state=42)
-    train_dataset = NewsDataset(train_data, tokenizer, max_length=MAX_LENGTH)
-    val_dataset = NewsDataset(val_data, tokenizer, max_length=MAX_LENGTH)
+        data, test_size=0.2, random_state=42)
+    train_dataset = NewsDataset(train_data)
+    val_dataset = NewsDataset(val_data)
 
     train_loader = DataLoader(
-        train_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4
+        train_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=8, pin_memory=True
     )
     val_loader = DataLoader(
-        val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4
+        val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=8, pin_memory=True
     )
-
+    tqdm.write('Data loaded successfully.')
     writer = SummaryWriter(os.path.join(
         HOME_DIR, "runs/%s" % (MODEL_CHECKPOINT)))
 
@@ -234,27 +206,25 @@ def main():
         model = MultiTaskBERTBasedModel(
             MODEL_CHECKPOINT=checkpoint_path, cache_dir=CACHE_DIR
         )
-        optimizer_path = os.path.join(checkpoint_path, "optimizer.pt")
-        scheduler_path = os.path.join(checkpoint_path, "scheduler.pt")
     else:
         starting_epoch = 0
         tqdm.write(f"Creating model from scratch {MODEL_CHECKPOINT}")
         model = MultiTaskBERTBasedModel(
             MODEL_CHECKPOINT=MODEL_CHECKPOINT, cache_dir=CACHE_DIR
         )
+
     if torch.cuda.device_count() > 1:
         model = DataParallel(model).cuda()
     model.to(DEVICE)
     optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
-    if latest_checkpoint and os.path.exists(optimizer_path):
-        optimizer.load_state_dict(torch.load(optimizer_path))
-
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=WARMUP_STEPS, num_training_steps=total_steps
     )
-    if latest_checkpoint and os.path.exists(scheduler_path):
-        scheduler.load_state_dict(torch.load(scheduler_path))
-
+    if latest_checkpoint:
+        optimizer.load_state_dict(torch.load(
+            os.path.join(checkpoint_path, "optimizer.pt")))
+        scheduler.load_state_dict(torch.load(
+            os.path.join(checkpoint_path, "scheduler.pt")))
     # Training
     scaler = GradScaler()
     for epoch in range(starting_epoch, EPOCHS):

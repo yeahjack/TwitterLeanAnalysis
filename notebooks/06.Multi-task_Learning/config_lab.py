@@ -1,7 +1,7 @@
 # config_lab.py
 import os
 import torch
-EPOCHS = 20
+EPOCHS = 30
 BATCH_SIZE = 54
 LEARNING_RATE = 2e-5
 MAX_LENGTH = 2048
