@@ -78,7 +78,7 @@ class MultiTaskBERTBasedModel(nn.Module):
 
 
 def save_checkpoints(model, optimizer, scheduler, model_dir, epoch):
-    checkpoint_path = os.path.join(model_dir, f"checkpoint_epoch_{epoch}")
+    checkpoint_path = os.path.join(model_dir, f"checkpoint_iter_{epoch}")
     os.makedirs(checkpoint_path, exist_ok=True)
 
     model_save = model.module if hasattr(model, "module") else model
@@ -106,7 +106,7 @@ def train(model, train_loader, optimizer, scheduler, device, epoch, writer, scal
     total_loss = 0
     classification_loss_fn = nn.CrossEntropyLoss()
     regression_loss_fn = nn.MSELoss()
-    progress_bar = tqdm(train_loader, leave=False, ncols=100)
+    progress_bar = tqdm(train_loader, leave=False, ncols=100, desc='Training')
 
     for batch_idx, batch in enumerate(progress_bar):
         optimizer.zero_grad()
@@ -152,9 +152,11 @@ def evaluate(model, val_loader, device):
     total_regression_loss = 0
     classification_loss_fn = nn.CrossEntropyLoss()
     regression_loss_fn = nn.MSELoss()
+    
+    progress_bar = tqdm(val_loader, leave=False, ncols=100, desc='Evaluating')
 
     with torch.no_grad():
-        for batch in val_loader:
+        for batch in progress_bar:  # Change this line
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
             kind = batch["kind"].to(device)
@@ -169,7 +171,7 @@ def evaluate(model, val_loader, device):
 
             total_classification_loss += classification_loss.item()
             total_regression_loss += regression_loss.item()
-
+    
     avg_classification_loss = total_classification_loss / len(val_loader)
     avg_regression_loss = total_regression_loss / len(val_loader)
 
@@ -199,15 +201,15 @@ def main():
     latest_checkpoint = get_latest_checkpoint(MODEL_DIR)
     if latest_checkpoint:
         checkpoint_path = os.path.join(MODEL_DIR, latest_checkpoint)
-        starting_epoch = int(latest_checkpoint.split("_")[-1])
+        starting_iter = int(latest_checkpoint.split("_")[-1])
         tqdm.write(
-            f"Starting from checkpoint {checkpoint_path} (epoch {starting_epoch})"
+            f"Starting from checkpoint {checkpoint_path} (iter {starting_iter})"
         )
         model = MultiTaskBERTBasedModel(
             MODEL_CHECKPOINT=checkpoint_path, cache_dir=CACHE_DIR
         )
     else:
-        starting_epoch = 0
+        starting_iter = 0
         tqdm.write(f"Creating model from scratch {MODEL_CHECKPOINT}")
         model = MultiTaskBERTBasedModel(
             MODEL_CHECKPOINT=MODEL_CHECKPOINT, cache_dir=CACHE_DIR
@@ -227,7 +229,7 @@ def main():
             os.path.join(checkpoint_path, "scheduler.pt")))
     # Training
     scaler = GradScaler()
-    for epoch in range(starting_epoch, EPOCHS):
+    for epoch in range(starting_iter, EPOCHS):
         tqdm.write(f"Epoch {epoch + 1}/{EPOCHS}")
 
         train_loss = train(
